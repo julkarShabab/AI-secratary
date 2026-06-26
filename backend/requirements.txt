@@ -8,3 +8,11 @@ google-genai
 groq
 pinecone
 sentence-transformers
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+ddgs
+slack-sdk
+jira
+celery
