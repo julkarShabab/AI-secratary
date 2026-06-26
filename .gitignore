@@ -36,4 +36,5 @@ Thumbs.db
 
 # Secrets
 *.pem
-*.key
+backend/credentials.json
+backend/gmail_token.json
