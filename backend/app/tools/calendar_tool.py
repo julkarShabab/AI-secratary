@@ -71,7 +71,7 @@ class CalendarTool(BaseTool):
         action = params.get("action")
 
         if action == "list":
-            max_results = params.get("max_results", 10)
+            max_results = int(params.get("max_results", 10))
             events = self.calendar.list_events(max_results=max_results)
             return {"success": True, "result": events, "error": None}
 

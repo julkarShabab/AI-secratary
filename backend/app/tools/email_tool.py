@@ -56,7 +56,7 @@ class EmailTool(BaseTool):
         action = params.get("action")
 
         if action == "list":
-            max_results = params.get("max_results", 10)
+            max_results = int(params.get("max_results", 10))
             emails = self.gmail.list_emails(max_results=max_results)
             return {
                 "success": True,

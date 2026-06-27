@@ -16,3 +16,4 @@ ddgs
 slack-sdk
 jira
 celery
+websockets
