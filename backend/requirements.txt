@@ -17,3 +17,5 @@ slack-sdk
 jira
 celery
 websockets
+pytest
+pytest-asyncio
