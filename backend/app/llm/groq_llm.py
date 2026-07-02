@@ -10,7 +10,7 @@ class GroqLLM(BaseLLM):
         if not api_key:
             raise ValueError("GROQ_API_KEY is not set in your .env file")
         self.client = Groq(api_key=api_key)
-        self.model_name = "llama-3.1-8b-instant"
+        self.model_name = "llama-3.3-70b-versatile"
 
     def chat(self, messages: List[Dict]) -> str:
         response = self.client.chat.completions.create(

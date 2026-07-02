@@ -36,22 +36,34 @@ class Orchestrator:
         return f"{self.system_prompt}\n\n{tools_desc}"
 
     def _parse_tool_call(self, response: str):
-        pattern = r"```(?:tool|\w+)\s*\n?\s*(\{.*?\})\s*```"
+        # Match ```tool, ```email_tool, ```json or any backtick block with JSON inside
+        pattern = r"`{1,3}(\w+)?\s*\n?\s*(\{.*?\})\s*`{1,3}"
         match = re.search(pattern, response, re.DOTALL)
 
-        if not match:
-            return None, None
+        if match:
+            try:
+                json_str = match.group(2).strip()
+                data = json.loads(json_str)
+                tool_name = data.get("tool")
+                params = data.get("params", {})
+                if tool_name:
+                    return tool_name, params
+            except json.JSONDecodeError:
+                pass
 
+        # Fallback: try to find raw JSON with "tool" key anywhere in response
         try:
-            json_str = match.group(1).strip()
-            data = json.loads(json_str)
-            tool_name = data.get("tool")
-            params = data.get("params", {})
-            if tool_name:
-                return tool_name, params
-            return None, None
+            full_json = re.search(r'\{.*\}', response, re.DOTALL)
+            if full_json:
+                data = json.loads(full_json.group())
+                tool_name = data.get("tool")
+                params = data.get("params", {})
+                if tool_name:
+                    return tool_name, params
         except json.JSONDecodeError:
-            return None, None
+            pass
+
+        return None, None
 
     def _execute_tool(self, tool_name: str, params: Dict) -> str:
         result = self.router.execute(tool_name, params)
