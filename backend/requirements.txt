@@ -19,3 +19,7 @@ celery
 websockets
 pytest
 pytest-asyncio
+pymupdf
+python-multipart
+pillow
+python-docx

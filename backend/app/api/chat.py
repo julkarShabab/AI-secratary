@@ -59,8 +59,47 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 continue
 
             payload = json.loads(data)
-            user_message = payload.get("message", "")
+            message_type = payload.get("type", "message")
 
+            # Handle document or image context — silent injection
+            if message_type == "context":
+                filename = payload.get("filename", "file")
+                content = payload.get("content", "")
+                file_type = payload.get("file_type", "document")
+
+                if file_type == "document":
+                    context_message = f"The user uploaded a document called '{filename}'. Here is its content:\n\n{content}\n\nAcknowledge you have received it and are ready for questions."
+                else:
+                    context_message = f"The user uploaded an image called '{filename}'. Note: you cannot view images directly. Let the user know and ask them to describe what they need help with."
+
+                memory.save_message("user", context_message)
+
+                await websocket.send_text(json.dumps({
+                    "type": "thinking",
+                    "message": "Aria is thinking..."
+                }))
+
+                try:
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        orchestrator.chat,
+                        context_message
+                    )
+                    memory.save_message("assistant", response)
+                    await websocket.send_text(json.dumps({
+                        "type": "message",
+                        "message": response
+                    }))
+                except Exception as e:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": "Something went wrong processing your file."
+                    }))
+                continue
+
+            # Handle regular chat message
+            user_message = payload.get("message", "")
             if not user_message:
                 continue
 
@@ -80,7 +119,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     user_message
                 )
                 memory.save_message("assistant", response)
-
                 await websocket.send_text(json.dumps({
                     "type": "message",
                     "message": response

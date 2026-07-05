@@ -2,34 +2,163 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useWebSocket } from "@/hooks/useWebSocket"
-import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import ConfirmAction from "@/components/ConfirmAction"
+import AttachmentCard from "@/components/AttachmentCard"
 import Link from "next/link"
+
+type PendingFile = {
+  file: File
+  type: "document" | "image"
+  preview?: string
+}
 
 export default function ChatWindow() {
   const sessionId = "user_session_001"
-  const { messages, isConnected, isThinking, sendMessage, sendConfirmation } = useWebSocket(sessionId)
+  const { messages, isConnected, isThinking, sendMessage, sendContext, sendConfirmation } = useWebSocket(sessionId)
   const [input, setInput] = useState("")
+  const [isRecording, setIsRecording] = useState(false)
+  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
+  const [showAttachMenu, setShowAttachMenu] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<any>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isThinking])
 
-  const handleSend = () => {
-    if (!input.trim() || !isConnected) return
-    sendMessage(input.trim())
-    setInput("")
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowAttachMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const adjustTextareaHeight = () => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = "auto"
+      textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
+    }
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleFileSelect = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    type: "document" | "image"
+  ) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (type === "image") {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        setPendingFile({
+          file,
+          type,
+          preview: ev.target?.result as string
+        })
+      }
+      reader.readAsDataURL(file)
+    } else {
+      setPendingFile({ file, type })
+    }
+
+    setShowAttachMenu(false)
+    e.target.value = ""
+  }
+
+  const handleSend = async () => {
+    if ((!input.trim() && !pendingFile) || !isConnected) return
+
+    if (pendingFile) {
+      setIsUploading(true)
+      const formData = new FormData()
+      formData.append("file", pendingFile.file)
+
+      try {
+        const endpoint = pendingFile.type === "document"
+          ? "/upload/document"
+          : "/upload/image"
+
+        const res = await fetch(`http://localhost:8000${endpoint}`, {
+          method: "POST",
+          body: formData
+        })
+
+        const data = await res.json()
+
+        if (data.success) {
+          if (pendingFile.type === "document") {
+            sendContext(pendingFile.file.name, data.content, "document")
+          } else {
+            const imageContext = `The user uploaded an image called "${data.filename}". Here is a detailed description:\n\n${data.description || "Image could not be analyzed."}\n\nUse this to answer questions about the image.`
+            sendContext(pendingFile.file.name, imageContext, "image", data.base64)
+          }
+        }
+      } catch (err) {
+        console.error("Upload failed:", err)
+      }
+
+      setIsUploading(false)
+      setPendingFile(null)
+    }
+
+    if (input.trim()) {
+      sendMessage(input.trim())
+      setInput("")
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto"
+      }
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
+  }
+
+  const handleVoiceInput = () => {
+    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+      alert("Voice input not supported. Please use Chrome.")
+      return
+    }
+
+    if (isRecording) {
+      recognitionRef.current?.stop()
+      setIsRecording(false)
+      return
+    }
+
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognitionRef.current = recognition
+
+    recognition.onstart = () => setIsRecording(true)
+    recognition.onresult = (event: any) => {
+      setInput(event.results[0][0].transcript)
+      setIsRecording(false)
+    }
+    recognition.onerror = () => setIsRecording(false)
+    recognition.onend = () => setIsRecording(false)
+
+    recognition.start()
   }
 
   return (
@@ -59,7 +188,13 @@ export default function ChatWindow() {
               key={msg.id}
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
-              {msg.type === "confirm" && msg.confirmData ? (
+              {msg.type === "attachment" && msg.attachmentData ? (
+                <AttachmentCard
+                  filename={msg.attachmentData.filename}
+                  file_type={msg.attachmentData.file_type}
+                  preview={msg.attachmentData.preview}
+                />
+              ) : msg.type === "confirm" && msg.confirmData ? (
                 <ConfirmAction
                   action={msg.confirmData.action}
                   details={msg.confirmData.details}
@@ -100,24 +235,111 @@ export default function ChatWindow() {
         </div>
       </ScrollArea>
 
-      {/* Input */}
-      <div className="flex gap-2 mt-4 pt-4 border-t">
-        <Input
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.txt,.docx"
+        className="hidden"
+        onChange={(e) => handleFileSelect(e, "document")}
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleFileSelect(e, "image")}
+      />
+
+      {/* Pending file preview */}
+      {pendingFile && (
+        <div className="flex items-center gap-3 mb-2 p-3 bg-muted rounded-xl border">
+          {pendingFile.type === "image" && pendingFile.preview ? (
+            <img
+              src={pendingFile.preview}
+              alt="preview"
+              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+            />
+          ) : (
+            <span className="text-xl flex-shrink-0">📄</span>
+          )}
+          <span className="text-sm truncate flex-1">{pendingFile.file.name}</span>
+          <button
+            onClick={() => setPendingFile(null)}
+            className="text-muted-foreground hover:text-foreground text-lg flex-shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Input bar */}
+      <div className="flex gap-2 mt-2 pt-4 border-t items-end">
+
+        {/* + attach menu */}
+        <div className="relative flex-shrink-0" ref={menuRef}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-8 h-8 rounded-full p-0 text-lg font-light"
+            onClick={() => setShowAttachMenu((prev) => !prev)}
+            disabled={!isConnected}
+          >
+            +
+          </Button>
+
+          {showAttachMenu && (
+            <div className="absolute bottom-10 left-0 bg-background border rounded-xl shadow-lg py-1 w-52 z-50">
+              <button
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <span>📄</span> Add files
+              </button>
+              <button
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                onClick={() => imageInputRef.current?.click()}
+              >
+                <span>🖼️</span> Add photos
+              </button>
+              <div className="border-t my-1" />
+              <button
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                onClick={() => { handleVoiceInput(); setShowAttachMenu(false) }}
+              >
+                <span>{isRecording ? "🔴" : "🎤"}</span>
+                {isRecording ? "Stop recording" : "Voice input"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Textarea */}
+        <textarea
+          ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value)
+            adjustTextareaHeight()
+          }}
           onKeyDown={handleKeyDown}
           placeholder={isConnected ? "Message Aria..." : "Connecting..."}
           disabled={!isConnected}
-          className="flex-1"
+          rows={1}
+          className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto"
+          style={{ maxHeight: "128px" }}
         />
+
+        {/* Send button */}
         <Button
           onClick={handleSend}
-          disabled={!isConnected || !input.trim()}
+          disabled={!isConnected || (!input.trim() && !pendingFile) || isUploading}
+          className="flex-shrink-0"
         >
-          Send
+          {isUploading ? "Sending..." : "Send"}
         </Button>
-      </div>
 
+      </div>
     </div>
   )
 }
