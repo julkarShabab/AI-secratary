@@ -20,6 +20,7 @@ export type MessageType = {
     filename: string;
     file_type: "document" | "image";
     preview?: string;
+    userMessage?: string;
   };
 };
 
@@ -30,84 +31,116 @@ export function useWebSocket(sessionId: string) {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://localhost:8000/ws/chat/${sessionId}`);
-    wsRef.current = ws;
+    let isCancelled = false;
+    setMessages([]);
+    setIsConnected(false);
 
-    ws.onopen = () => setIsConnected(true);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.type === "thinking") {
-        setIsThinking(true);
-        return;
+    const loadHistoryAndConnect = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/api/conversations/${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!isCancelled && Array.isArray(data.messages)) {
+            setMessages(
+              data.messages.map((m: any) => ({
+                id: m.id,
+                role: m.role,
+                content: m.content,
+                type: "message",
+              }))
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load conversation history:", err);
       }
 
-      setIsThinking(false);
+      if (isCancelled) return;
 
-      if (data.type === "connected") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "system",
-            content: data.message,
-            type: "connected",
-          },
-        ]);
-        return;
-      }
+      const ws = new WebSocket(`ws://localhost:8000/ws/chat/${sessionId}`);
+      wsRef.current = ws;
 
-      if (data.type === "confirm") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "system",
-            content: "",
-            type: "confirm",
-            confirmData: data.confirmData,
-          },
-        ]);
-        return;
-      }
+      ws.onopen = () => setIsConnected(true);
 
-      if (data.type === "message") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "assistant",
-            content: data.message,
-            type: "message",
-          },
-        ]);
-        return;
-      }
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
 
-      if (data.type === "error") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "system",
-            content: data.message,
-            type: "error",
-          },
-        ]);
-      }
+        if (data.type === "thinking") {
+          setIsThinking(true);
+          return;
+        }
+
+        setIsThinking(false);
+
+        if (data.type === "connected") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              role: "system",
+              content: data.message,
+              type: "connected",
+            },
+          ]);
+          return;
+        }
+
+        if (data.type === "confirm") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              role: "system",
+              content: "",
+              type: "confirm",
+              confirmData: data.confirmData,
+            },
+          ]);
+          return;
+        }
+
+        if (data.type === "message") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              role: "assistant",
+              content: data.message,
+              type: "message",
+            },
+          ]);
+          return;
+        }
+
+        if (data.type === "error") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now().toString(),
+              role: "system",
+              content: data.message,
+              type: "error",
+            },
+          ]);
+        }
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        setIsThinking(false);
+      };
+      ws.onerror = () => {
+        setIsConnected(false);
+        setIsThinking(false);
+      };
     };
 
-    ws.onclose = () => {
-      setIsConnected(false);
-      setIsThinking(false);
-    };
-    ws.onerror = () => {
-      setIsConnected(false);
-      setIsThinking(false);
-    };
+    loadHistoryAndConnect();
 
-    return () => ws.close();
+    return () => {
+      isCancelled = true;
+      wsRef.current?.close();
+    };
   }, [sessionId]);
 
   const sendMessage = useCallback((message: string) => {
@@ -134,27 +167,16 @@ export function useWebSocket(sessionId: string) {
       userMessage?: string,
     ) => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        setMessages((prev) => {
-          const newMessages = [
-            ...prev,
-            {
-              id: Date.now().toString(),
-              role: "user" as const,
-              content: "",
-              type: "attachment" as const,
-              attachmentData: { filename, file_type, preview },
-            },
-          ];
-          if (userMessage) {
-            newMessages.push({
-              id: (Date.now() + 1).toString(),
-              role: "user" as const,
-              content: userMessage,
-              type: "message" as const,
-            });
-          }
-          return newMessages;
-        });
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: "user" as const,
+            content: "",
+            type: "attachment" as const,
+            attachmentData: { filename, file_type, preview, userMessage },
+          },
+        ]);
         wsRef.current.send(
           JSON.stringify({
             type: "context",

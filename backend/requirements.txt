@@ -23,3 +23,8 @@ pymupdf
 python-multipart
 pillow
 python-docx
+bcrypt
+python-jose[cryptography]
+sqlalchemy
+psycopg2-binary
+alembic

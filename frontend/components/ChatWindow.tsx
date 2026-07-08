@@ -1,169 +1,198 @@
-"use client"
-
-import { useState, useRef, useEffect } from "react"
-import { useWebSocket } from "@/hooks/useWebSocket"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import ConfirmAction from "@/components/ConfirmAction"
-import AttachmentCard from "@/components/AttachmentCard"
-import Link from "next/link"
+"use client";
+import ReactMarkdown from "react-markdown";
+import { useState, useRef, useEffect } from "react";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import ConfirmAction from "@/components/ConfirmAction";
+import AttachmentCard from "@/components/AttachmentCard";
+import Link from "next/link";
 
 type PendingFile = {
-  file: File
-  type: "document" | "image"
-  preview?: string
-}
+  file: File;
+  type: "document" | "image";
+  preview?: string;
+};
 
-export default function ChatWindow() {
-  const sessionId = "user_session_001"
-  const { messages, isConnected, isThinking, sendMessage, sendContext, sendConfirmation } = useWebSocket(sessionId)
-  const [input, setInput] = useState("")
-  const [isRecording, setIsRecording] = useState(false)
-  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null)
-  const [showAttachMenu, setShowAttachMenu] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
-  const recognitionRef = useRef<any>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+type ChatWindowProps = {
+  conversationId: string;
+};
+
+export default function ChatWindow({ conversationId }: ChatWindowProps) {
+  const {
+    messages,
+    isConnected,
+    isThinking,
+    sendMessage,
+    sendContext,
+    sendConfirmation,
+  } = useWebSocket(conversationId);
+  const [input, setInput] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, isThinking])
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isThinking]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setShowAttachMenu(false)
+        setShowAttachMenu(false);
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const adjustTextareaHeight = () => {
-    const textarea = textareaRef.current
+    const textarea = textareaRef.current;
     if (textarea) {
-      textarea.style.height = "auto"
-      textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
+      textarea.style.height = "auto";
+      textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px";
     }
-  }
+  };
 
   const handleFileSelect = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: "document" | "image"
+    type: "document" | "image",
   ) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     if (type === "image") {
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = (ev) => {
-        setPendingFile({
-          file,
-          type,
-          preview: ev.target?.result as string
-        })
-      }
-      reader.readAsDataURL(file)
+        setPendingFile({ file, type, preview: ev.target?.result as string });
+      };
+      reader.readAsDataURL(file);
     } else {
-      setPendingFile({ file, type })
+      setPendingFile({ file, type });
     }
 
-    setShowAttachMenu(false)
-    e.target.value = ""
-  }
+    setShowAttachMenu(false);
+    e.target.value = "";
+  };
 
   const handleSend = async () => {
-    if ((!input.trim() && !pendingFile) || !isConnected) return
+    if ((!input.trim() && !pendingFile) || !isConnected) return;
+
+    const textToSend = input.trim();
+    setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
 
     if (pendingFile) {
-      setIsUploading(true)
-      const formData = new FormData()
-      formData.append("file", pendingFile.file)
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append("file", pendingFile.file);
 
       try {
-        const endpoint = pendingFile.type === "document"
-          ? "/upload/document"
-          : "/upload/image"
+        const endpoint =
+          pendingFile.type === "document"
+            ? "/upload/document"
+            : "/upload/image";
 
         const res = await fetch(`http://localhost:8000${endpoint}`, {
           method: "POST",
-          body: formData
-        })
+          body: formData,
+        });
 
-        const data = await res.json()
+        const data = await res.json();
 
         if (data.success) {
           if (pendingFile.type === "document") {
-            sendContext(pendingFile.file.name, data.content, "document")
+            const contextWithMsg = textToSend
+              ? `${data.content}\n\nUser question: ${textToSend}`
+              : data.content;
+            sendContext(
+              pendingFile.file.name,
+              contextWithMsg,
+              "document",
+              undefined,
+              textToSend,
+            );
           } else {
-            const imageContext = `The user uploaded an image called "${data.filename}". Here is a detailed description:\n\n${data.description || "Image could not be analyzed."}\n\nUse this to answer questions about the image.`
-            sendContext(pendingFile.file.name, imageContext, "image", data.base64)
+            const description =
+              data.description || "Image could not be analyzed.";
+            const contextWithMsg = textToSend
+              ? `The user uploaded an image called "${data.filename}". Description:\n\n${description}\n\nUser question: ${textToSend}`
+              : `The user uploaded an image called "${data.filename}". Description:\n\n${description}`;
+            sendContext(
+              pendingFile.file.name,
+              contextWithMsg,
+              "image",
+              data.base64,
+              textToSend,
+            );
           }
         }
       } catch (err) {
-        console.error("Upload failed:", err)
+        console.error("Upload failed:", err);
       }
 
-      setIsUploading(false)
-      setPendingFile(null)
+      setIsUploading(false);
+      setPendingFile(null);
+    } else if (textToSend) {
+      sendMessage(textToSend);
     }
-
-    if (input.trim()) {
-      sendMessage(input.trim())
-      setInput("")
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto"
-      }
-    }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
   const handleVoiceInput = () => {
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      alert("Voice input not supported. Please use Chrome.")
-      return
+    if (
+      !("webkitSpeechRecognition" in window) &&
+      !("SpeechRecognition" in window)
+    ) {
+      alert("Voice input not supported. Please use Chrome.");
+      return;
     }
 
     if (isRecording) {
-      recognitionRef.current?.stop()
-      setIsRecording(false)
-      return
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+      return;
     }
 
     const SpeechRecognition =
-      (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
 
-    const recognition = new SpeechRecognition()
-    recognition.lang = "en-US"
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognitionRef.current = recognition
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognitionRef.current = recognition;
 
-    recognition.onstart = () => setIsRecording(true)
+    recognition.onstart = () => setIsRecording(true);
     recognition.onresult = (event: any) => {
-      setInput(event.results[0][0].transcript)
-      setIsRecording(false)
-    }
-    recognition.onerror = () => setIsRecording(false)
-    recognition.onend = () => setIsRecording(false)
+      setInput(event.results[0][0].transcript);
+      setIsRecording(false);
+    };
+    recognition.onerror = () => setIsRecording(false);
+    recognition.onend = () => setIsRecording(false);
 
-    recognition.start()
-  }
+    recognition.start();
+  };
 
   return (
     <div className="flex flex-col h-screen max-w-3xl mx-auto p-4">
-
       {/* Header */}
       <div className="flex items-center justify-between mb-4 pb-4 border-b">
         <div>
@@ -175,7 +204,9 @@ export default function ChatWindow() {
             {isConnected ? "Connected" : "Disconnected"}
           </Badge>
           <Link href="/settings">
-            <Button variant="outline" size="sm">Settings</Button>
+            <Button variant="outline" size="sm">
+              Settings
+            </Button>
           </Link>
         </div>
       </div>
@@ -189,17 +220,28 @@ export default function ChatWindow() {
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               {msg.type === "attachment" && msg.attachmentData ? (
-                <AttachmentCard
-                  filename={msg.attachmentData.filename}
-                  file_type={msg.attachmentData.file_type}
-                  preview={msg.attachmentData.preview}
-                />
+                <div className="flex flex-col items-end gap-1">
+                  <AttachmentCard
+                    filename={msg.attachmentData.filename}
+                    file_type={msg.attachmentData.file_type}
+                    preview={msg.attachmentData.preview}
+                  />
+                  {msg.attachmentData.userMessage && (
+                    <div className="max-w-[75%] rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap bg-primary text-primary-foreground">
+                      {msg.attachmentData.userMessage}
+                    </div>
+                  )}
+                </div>
               ) : msg.type === "confirm" && msg.confirmData ? (
                 <ConfirmAction
                   action={msg.confirmData.action}
                   details={msg.confirmData.details}
-                  onApprove={() => sendConfirmation(msg.confirmData!.confirm_id, true)}
-                  onReject={() => sendConfirmation(msg.confirmData!.confirm_id, false)}
+                  onApprove={() =>
+                    sendConfirmation(msg.confirmData!.confirm_id, true)
+                  }
+                  onReject={() =>
+                    sendConfirmation(msg.confirmData!.confirm_id, false)
+                  }
                 />
               ) : msg.role === "system" ? (
                 <div className="text-xs text-muted-foreground text-center w-full py-1">
@@ -207,13 +249,64 @@ export default function ChatWindow() {
                 </div>
               ) : (
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground rounded-br-sm"
                       : "bg-muted text-foreground rounded-bl-sm"
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === "user" ? (
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  ) : (
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => (
+                          <p className="mb-2 last:mb-0">{children}</p>
+                        ),
+                        strong: ({ children }) => (
+                          <strong className="font-semibold">{children}</strong>
+                        ),
+                        ul: ({ children }) => (
+                          <ul className="list-disc pl-4 mb-2 space-y-1">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({ children }) => (
+                          <ol className="list-decimal pl-4 mb-2 space-y-1">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({ children }) => <li>{children}</li>,
+                        code: ({ children }) => (
+                          <code className="bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-xs font-mono">
+                            {children}
+                          </code>
+                        ),
+                        pre: ({ children }) => (
+                          <pre className="bg-black/10 dark:bg-white/10 rounded p-3 text-xs font-mono overflow-x-auto mb-2">
+                            {children}
+                          </pre>
+                        ),
+                        h1: ({ children }) => (
+                          <h1 className="text-base font-semibold mb-2">
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({ children }) => (
+                          <h2 className="text-sm font-semibold mb-2">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({ children }) => (
+                          <h3 className="text-sm font-medium mb-1">
+                            {children}
+                          </h3>
+                        ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  )}
                 </div>
               )}
             </div>
@@ -258,15 +351,17 @@ export default function ChatWindow() {
             <img
               src={pendingFile.preview}
               alt="preview"
-              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+              className="w-10 h-10 rounded-lg object-cover shrink-0"
             />
           ) : (
-            <span className="text-xl flex-shrink-0">📄</span>
+            <span className="text-xl shrink-0">📄</span>
           )}
-          <span className="text-sm truncate flex-1">{pendingFile.file.name}</span>
+          <span className="text-sm truncate flex-1">
+            {pendingFile.file.name}
+          </span>
           <button
             onClick={() => setPendingFile(null)}
-            className="text-muted-foreground hover:text-foreground text-lg flex-shrink-0"
+            className="text-muted-foreground hover:text-foreground text-lg shrink-0"
           >
             ✕
           </button>
@@ -275,9 +370,8 @@ export default function ChatWindow() {
 
       {/* Input bar */}
       <div className="flex gap-2 mt-2 pt-4 border-t items-end">
-
         {/* + attach menu */}
-        <div className="relative flex-shrink-0" ref={menuRef}>
+        <div className="relative shrink-0" ref={menuRef}>
           <Button
             variant="outline"
             size="sm"
@@ -305,7 +399,10 @@ export default function ChatWindow() {
               <div className="border-t my-1" />
               <button
                 className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
-                onClick={() => { handleVoiceInput(); setShowAttachMenu(false) }}
+                onClick={() => {
+                  handleVoiceInput();
+                  setShowAttachMenu(false);
+                }}
               >
                 <span>{isRecording ? "🔴" : "🎤"}</span>
                 {isRecording ? "Stop recording" : "Voice input"}
@@ -319,8 +416,8 @@ export default function ChatWindow() {
           ref={textareaRef}
           value={input}
           onChange={(e) => {
-            setInput(e.target.value)
-            adjustTextareaHeight()
+            setInput(e.target.value);
+            adjustTextareaHeight();
           }}
           onKeyDown={handleKeyDown}
           placeholder={isConnected ? "Message Aria..." : "Connecting..."}
@@ -333,13 +430,14 @@ export default function ChatWindow() {
         {/* Send button */}
         <Button
           onClick={handleSend}
-          disabled={!isConnected || (!input.trim() && !pendingFile) || isUploading}
-          className="flex-shrink-0"
+          disabled={
+            !isConnected || (!input.trim() && !pendingFile) || isUploading
+          }
+          className="shrink-0"
         >
           {isUploading ? "Sending..." : "Send"}
         </Button>
-
       </div>
     </div>
-  )
+  );
 }
