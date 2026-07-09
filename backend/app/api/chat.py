@@ -5,7 +5,6 @@ load_dotenv()
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.llm.groq_llm import GroqLLM
 from app.agents.orchestrator import Orchestrator
-from app.agents.hitl_gate import HitlGate
 from app.memory.memory_manager import MemoryManager
 from app.tools.email_tool import EmailTool
 from app.tools.calendar_tool import CalendarTool
@@ -33,38 +32,50 @@ def get_tools():
     ]
 
 
-def _get_or_create_conversation(db, conversation_id: str, user_id: str):
-    conversation = db.query(models.Conversation).filter(
-        models.Conversation.id == conversation_id
-    ).first()
-    if not conversation:
-        conversation = models.Conversation(id=conversation_id, user_id=user_id)
-        db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
-    return conversation
+def _get_or_create_conversation(db, conversation_id: str, user_id: int):
+    try:
+        conversation = db.query(models.Conversation).filter(
+            models.Conversation.id == conversation_id
+        ).first()
+        if not conversation:
+            conversation = models.Conversation(
+                id=conversation_id,
+                user_id=user_id,
+                title="New conversation"
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+        return conversation
+    except Exception as e:
+        db.rollback()
+        print(f"[DB] Error creating conversation: {str(e)}")
+        return None
 
 
 def _save_message(db, conversation_id: str, role: str, content: str):
-    now = datetime.now(timezone.utc)
+    try:
+        now = datetime.now(timezone.utc)
+        message = models.Message(
+            conversation_id=conversation_id,
+            role=role,
+            content=content,
+            created_at=now
+        )
+        db.add(message)
 
-    message = models.Message(
-        conversation_id=conversation_id,
-        role=role,
-        content=content,
-        created_at=now
-    )
-    db.add(message)
+        conversation = db.query(models.Conversation).filter(
+            models.Conversation.id == conversation_id
+        ).first()
+        if conversation:
+            if role == "user" and conversation.title == "New conversation":
+                conversation.title = content[:40] + ("..." if len(content) > 40 else "")
+            conversation.updated_at = now
 
-    conversation = db.query(models.Conversation).filter(
-        models.Conversation.id == conversation_id
-    ).first()
-    if conversation:
-        if role == "user" and conversation.title == "New conversation":
-            conversation.title = content[:40] + ("..." if len(content) > 40 else "")
-        conversation.updated_at = now
-
-    db.commit()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[DB] Error saving message: {str(e)}")
 
 
 @router.websocket("/ws/chat/{session_id}")
