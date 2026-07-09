@@ -14,15 +14,20 @@ type SidebarProps = {
   activeId: string
   onSelect: (id: string) => void
   onNewChat: (id: string) => void
+  token: string
+  userName?: string
+  onLogout: () => void
 }
 
-export default function Sidebar({ activeId, onSelect, onNewChat }: SidebarProps) {
+export default function Sidebar({ activeId, onSelect, onNewChat, token, userName, onLogout }: SidebarProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/conversations")
+      const res = await fetch("http://localhost:8000/api/conversations", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
       const data = await res.json()
       setConversations(data)
     } catch (err) {
@@ -30,7 +35,7 @@ export default function Sidebar({ activeId, onSelect, onNewChat }: SidebarProps)
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [token])
 
   useEffect(() => {
     fetchConversations()
@@ -40,7 +45,10 @@ export default function Sidebar({ activeId, onSelect, onNewChat }: SidebarProps)
     try {
       const res = await fetch("http://localhost:8000/api/conversations", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ title: "New conversation" }),
       })
       const data = await res.json()
@@ -81,6 +89,13 @@ export default function Sidebar({ activeId, onSelect, onNewChat }: SidebarProps)
             {conv.title}
           </button>
         ))}
+      </div>
+
+      <div className="p-3 border-t flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground truncate">{userName}</span>
+        <Button variant="ghost" size="sm" onClick={onLogout}>
+          Log out
+        </Button>
       </div>
     </div>
   )

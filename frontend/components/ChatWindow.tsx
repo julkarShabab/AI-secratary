@@ -17,9 +17,10 @@ type PendingFile = {
 
 type ChatWindowProps = {
   conversationId: string;
+  token: string;
 };
 
-export default function ChatWindow({ conversationId }: ChatWindowProps) {
+export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
   const {
     messages,
     isConnected,
@@ -27,7 +28,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
     sendMessage,
     sendContext,
     sendConfirmation,
-  } = useWebSocket(conversationId);
+  } = useWebSocket(conversationId, token);
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);

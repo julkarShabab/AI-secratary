@@ -28,3 +28,8 @@ python-jose[cryptography]
 sqlalchemy
 psycopg2-binary
 alembic
+passlib[bcrypt]
+bcrypt==4.0.1
+pyjwt
+requests
+email-validator

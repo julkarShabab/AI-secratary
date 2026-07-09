@@ -2,7 +2,7 @@ import json
 import asyncio
 from dotenv import load_dotenv
 load_dotenv()
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from app.llm.groq_llm import GroqLLM
 from app.agents.orchestrator import Orchestrator
 from app.agents.hitl_gate import HitlGate
@@ -14,6 +14,7 @@ from app.tools.slack_tool import SlackTool
 from app.tools.task_tool import TaskTool
 from app.db.session import SessionLocal
 from app.db import models
+from app.core.security import decode_access_token
 from datetime import datetime, timezone
 
 router = APIRouter()
@@ -32,12 +33,12 @@ def get_tools():
     ]
 
 
-def _get_or_create_conversation(db, conversation_id: str):
+def _get_or_create_conversation(db, conversation_id: str, user_id: str):
     conversation = db.query(models.Conversation).filter(
         models.Conversation.id == conversation_id
     ).first()
     if not conversation:
-        conversation = models.Conversation(id=conversation_id, user_id=1)
+        conversation = models.Conversation(id=conversation_id, user_id=user_id)
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
@@ -47,7 +48,12 @@ def _get_or_create_conversation(db, conversation_id: str):
 def _save_message(db, conversation_id: str, role: str, content: str):
     now = datetime.now(timezone.utc)
 
-    message = models.Message(conversation_id=conversation_id, role=role, content=content, created_at=now)
+    message = models.Message(
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        created_at=now
+    )
     db.add(message)
 
     conversation = db.query(models.Conversation).filter(
@@ -62,12 +68,21 @@ def _save_message(db, conversation_id: str, role: str, content: str):
 
 
 @router.websocket("/ws/chat/{session_id}")
-async def websocket_chat(websocket: WebSocket, session_id: str):
+async def websocket_chat(
+    websocket: WebSocket,
+    session_id: str,
+    token: str = Query(None)
+):
+    user_id = decode_access_token(token) if token else None
+    if not user_id:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
-    print(f"[WebSocket] Client connected: {session_id}")
+    print(f"[WebSocket] Client connected: {session_id} user: {user_id}")
 
     db = SessionLocal()
-    conversation = _get_or_create_conversation(db, session_id)
+    conversation = _get_or_create_conversation(db, session_id, user_id)
 
     llm = GroqLLM()
     tools = get_tools()
@@ -78,7 +93,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
         system_prompt=system_prompt
     )
 
-    # Preload prior messages so Aria remembers this conversation on reconnect
     past_messages = db.query(models.Message).filter(
         models.Message.conversation_id == session_id
     ).order_by(models.Message.created_at).all()

@@ -15,7 +15,8 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True, nullable=True)
     name = Column(String, nullable=True)
-    google_id = Column(String, unique=True, nullable=True)  # ready for OAuth later
+    google_id = Column(String, unique=True, nullable=True)
+    hashed_password = Column(String, nullable=True)  # null for Google-only accounts
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
