@@ -1,4 +1,5 @@
 "use client";
+import { useChat } from "@/contexts/ChatContext";
 import ReactMarkdown from "react-markdown";
 import { useState, useRef, useEffect } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -19,7 +20,7 @@ type ChatWindowProps = {
   token: string;
 };
 
-export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
+export default function ChatWindow() {
   const {
     messages,
     isConnected,
@@ -27,7 +28,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
     sendMessage,
     sendContext,
     sendConfirmation,
-  } = useWebSocket(conversationId, token);
+  } = useChat();
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);

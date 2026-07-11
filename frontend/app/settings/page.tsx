@@ -74,6 +74,7 @@ export default function SettingsPage() {
   const disconnected = services.filter((s) => !s.connected)
 
   return (
+    <div className="h-screen overflow-y-auto">
     <div className="max-w-3xl mx-auto p-6">
 
       {/* Header */}
@@ -163,6 +164,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
+    </div>
     </div>
   )
 }
