@@ -78,36 +78,46 @@ def _save_message(db, conversation_id: str, role: str, content: str):
         print(f"[DB] Error saving message: {str(e)}")
 
 
-@router.websocket("/ws/chat/{session_id}")
-async def websocket_chat(
-    websocket: WebSocket,
-    session_id: str,
-    token: str = Query(None)
-):
+class ConversationSession:
+    """Holds the orchestrator + memory manager for one conversation, cached
+    for the lifetime of a single websocket connection."""
+
+    def __init__(self, conversation_id: str, db, user_id: int):
+        self.conversation_id = conversation_id
+        self.memory = MemoryManager(session_id=conversation_id)
+        self.orchestrator = Orchestrator(
+            llm=GroqLLM(),
+            tools=get_tools(),
+            system_prompt=system_prompt
+        )
+
+        _get_or_create_conversation(db, conversation_id, user_id)
+
+        past_messages = db.query(models.Message).filter(
+            models.Message.conversation_id == conversation_id
+        ).order_by(models.Message.created_at).all()
+        self.orchestrator.history = [
+            {"role": m.role, "content": m.content} for m in past_messages
+        ]
+
+
+@router.websocket("/ws/chat")
+async def websocket_chat(websocket: WebSocket, token: str = Query(None)):
     user_id = decode_access_token(token) if token else None
     if not user_id:
         await websocket.close(code=1008)
         return
 
     await websocket.accept()
-    print(f"[WebSocket] Client connected: {session_id} user: {user_id}")
+    print(f"[WebSocket] Client connected: user {user_id}")
 
     db = SessionLocal()
-    conversation = _get_or_create_conversation(db, session_id, user_id)
+    sessions: dict[str, ConversationSession] = {}
 
-    llm = GroqLLM()
-    tools = get_tools()
-    memory = MemoryManager(session_id=session_id)
-    orchestrator = Orchestrator(
-        llm=llm,
-        tools=tools,
-        system_prompt=system_prompt
-    )
-
-    past_messages = db.query(models.Message).filter(
-        models.Message.conversation_id == session_id
-    ).order_by(models.Message.created_at).all()
-    orchestrator.history = [{"role": m.role, "content": m.content} for m in past_messages]
+    def get_session(conversation_id: str) -> ConversationSession:
+        if conversation_id not in sessions:
+            sessions[conversation_id] = ConversationSession(conversation_id, db, user_id)
+        return sessions[conversation_id]
 
     await websocket.send_text(json.dumps({
         "type": "connected",
@@ -126,6 +136,16 @@ async def websocket_chat(
 
             payload = json.loads(data)
             message_type = payload.get("type", "message")
+            conversation_id = payload.get("conversation_id")
+
+            if not conversation_id:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "No conversation specified."
+                }))
+                continue
+
+            session = get_session(conversation_id)
 
             if message_type == "context":
                 filename = payload.get("filename", "file")
@@ -137,11 +157,12 @@ async def websocket_chat(
                 else:
                     context_message = f"The user uploaded an image called '{filename}'. Note: you cannot view images directly. Let the user know and ask them to describe what they need help with."
 
-                memory.save_message("user", context_message)
-                _save_message(db, session_id, "user", context_message)
+                session.memory.save_message("user", context_message)
+                _save_message(db, conversation_id, "user", context_message)
 
                 await websocket.send_text(json.dumps({
                     "type": "thinking",
+                    "conversation_id": conversation_id,
                     "message": "Aria is thinking..."
                 }))
 
@@ -149,18 +170,20 @@ async def websocket_chat(
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
                         None,
-                        orchestrator.chat,
+                        session.orchestrator.chat,
                         context_message
                     )
-                    memory.save_message("assistant", response)
-                    _save_message(db, session_id, "assistant", response)
+                    session.memory.save_message("assistant", response)
+                    _save_message(db, conversation_id, "assistant", response)
                     await websocket.send_text(json.dumps({
                         "type": "message",
+                        "conversation_id": conversation_id,
                         "message": response
                     }))
-                except Exception as e:
+                except Exception:
                     await websocket.send_text(json.dumps({
                         "type": "error",
+                        "conversation_id": conversation_id,
                         "message": "Something went wrong processing your file."
                     }))
                 continue
@@ -169,12 +192,13 @@ async def websocket_chat(
             if not user_message:
                 continue
 
-            print(f"[WebSocket] Message from {session_id}: {user_message}")
-            memory.save_message("user", user_message)
-            _save_message(db, session_id, "user", user_message)
+            print(f"[WebSocket] Message on {conversation_id}: {user_message}")
+            session.memory.save_message("user", user_message)
+            _save_message(db, conversation_id, "user", user_message)
 
             await websocket.send_text(json.dumps({
                 "type": "thinking",
+                "conversation_id": conversation_id,
                 "message": "Aria is thinking..."
             }))
 
@@ -182,13 +206,14 @@ async def websocket_chat(
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
                     None,
-                    orchestrator.chat,
+                    session.orchestrator.chat,
                     user_message
                 )
-                memory.save_message("assistant", response)
-                _save_message(db, session_id, "assistant", response)
+                session.memory.save_message("assistant", response)
+                _save_message(db, conversation_id, "assistant", response)
                 await websocket.send_text(json.dumps({
                     "type": "message",
+                    "conversation_id": conversation_id,
                     "message": response
                 }))
 
@@ -196,12 +221,14 @@ async def websocket_chat(
                 print(f"[WebSocket] Error: {str(e)}")
                 await websocket.send_text(json.dumps({
                     "type": "error",
+                    "conversation_id": conversation_id,
                     "message": "Something went wrong. Please try again."
                 }))
 
     except WebSocketDisconnect:
-        print(f"[WebSocket] Client disconnected: {session_id}")
-        memory.clear_session()
+        print(f"[WebSocket] Client disconnected: user {user_id}")
+        for session in sessions.values():
+            session.memory.clear_session()
         db.close()
 
 

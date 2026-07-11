@@ -42,18 +42,26 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined)
 export function ChatProvider({ children }: { children: ReactNode }) {
   const { token } = useAuth()
   const [conversationId, setConversationIdState] = useState<string | null>(null)
-  const [messages, setMessages] = useState<MessageType[]>([])
+  const [messagesByConversation, setMessagesByConversation] = useState<Record<string, MessageType[]>>({})
+  const [loadedConversations, setLoadedConversations] = useState<Set<string>>(new Set())
   const [isConnected, setIsConnected] = useState(false)
-  const [isThinking, setIsThinking] = useState(false)
+  const [thinkingSet, setThinkingSet] = useState<Set<string>>(new Set())
   const wsRef = useRef<WebSocket | null>(null)
   const hasInitialized = useRef(false)
+
+  const appendMessage = useCallback((convId: string, msg: MessageType) => {
+    setMessagesByConversation((prev) => ({
+      ...prev,
+      [convId]: [...(prev[convId] || []), msg],
+    }))
+  }, [])
 
   const setConversationId = useCallback((id: string) => {
     localStorage.setItem(STORAGE_KEY, id)
     setConversationIdState(id)
   }, [])
 
-  // Resolve which conversation to open once we have a token
+  // Resolve which conversation to open on first load
   useEffect(() => {
     if (!token || hasInitialized.current) return
     hasInitialized.current = true
@@ -102,133 +110,158 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     resolve()
   }, [token])
 
-  // Own the websocket connection — lives here, not inside any page component
+  // Open the websocket exactly once per login — survives conversation switches
+  useEffect(() => {
+    if (!token) return
+
+    const ws = new WebSocket(`ws://localhost:8000/ws/chat?token=${token}`)
+    wsRef.current = ws
+
+    ws.onopen = () => setIsConnected(true)
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      const convId = data.conversation_id
+
+      if (data.type === "thinking") {
+        if (convId) {
+          setThinkingSet((prev) => new Set(prev).add(convId))
+        }
+        return
+      }
+
+      if (convId) {
+        setThinkingSet((prev) => {
+          const next = new Set(prev)
+          next.delete(convId)
+          return next
+        })
+      }
+
+      if (data.type === "connected") {
+        // Global system message, not tied to a specific conversation yet
+        return
+      }
+
+      if (!convId) return
+
+      if (data.type === "confirm") {
+        appendMessage(convId, {
+          id: Date.now().toString(),
+          role: "system",
+          content: "",
+          type: "confirm",
+          confirmData: data.confirmData,
+        })
+        return
+      }
+
+      if (data.type === "message") {
+        appendMessage(convId, {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: data.message,
+          type: "message",
+        })
+        return
+      }
+
+      if (data.type === "error") {
+        appendMessage(convId, {
+          id: Date.now().toString(),
+          role: "system",
+          content: data.message,
+          type: "error",
+        })
+      }
+    }
+
+    ws.onclose = () => setIsConnected(false)
+    ws.onerror = () => setIsConnected(false)
+
+    return () => {
+      ws.close()
+    }
+  }, [token, appendMessage])
+
+  // Lazily load history the first time a conversation is opened
   useEffect(() => {
     if (!token || !conversationId) return
+    if (loadedConversations.has(conversationId)) return
 
-    let isCancelled = false
-    setMessages([])
-    setIsConnected(false)
-
-    const loadHistoryAndConnect = async () => {
+    const loadHistory = async () => {
       try {
         const res = await fetch(`${API_URL}/api/conversations/${conversationId}`, {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (res.ok) {
           const data = await res.json()
-          if (!isCancelled && Array.isArray(data.messages)) {
-            setMessages(
-              data.messages.map((m: any) => ({
+          const history: MessageType[] = Array.isArray(data.messages)
+            ? data.messages.map((m: any) => ({
                 id: m.id,
                 role: m.role,
                 content: m.content,
                 type: "message",
-              })),
-            )
-          }
+              }))
+            : []
+          setMessagesByConversation((prev) => ({ ...prev, [conversationId]: history }))
         }
       } catch (err) {
         console.error("Failed to load conversation history:", err)
-      }
-
-      if (isCancelled) return
-
-      const ws = new WebSocket(`ws://localhost:8000/ws/chat/${conversationId}?token=${token}`)
-      wsRef.current = ws
-
-      ws.onopen = () => setIsConnected(true)
-
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-
-        if (data.type === "thinking") {
-          setIsThinking(true)
-          return
-        }
-        setIsThinking(false)
-
-        if (data.type === "connected") {
-          setMessages((prev) => [
-            ...prev,
-            { id: Date.now().toString(), role: "system", content: data.message, type: "connected" },
-          ])
-          return
-        }
-        if (data.type === "confirm") {
-          setMessages((prev) => [
-            ...prev,
-            { id: Date.now().toString(), role: "system", content: "", type: "confirm", confirmData: data.confirmData },
-          ])
-          return
-        }
-        if (data.type === "message") {
-          setMessages((prev) => [
-            ...prev,
-            { id: Date.now().toString(), role: "assistant", content: data.message, type: "message" },
-          ])
-          return
-        }
-        if (data.type === "error") {
-          setMessages((prev) => [
-            ...prev,
-            { id: Date.now().toString(), role: "system", content: data.message, type: "error" },
-          ])
-        }
-      }
-
-      ws.onclose = () => {
-        setIsConnected(false)
-        setIsThinking(false)
-      }
-      ws.onerror = () => {
-        setIsConnected(false)
-        setIsThinking(false)
+      } finally {
+        setLoadedConversations((prev) => new Set(prev).add(conversationId))
       }
     }
 
-    loadHistoryAndConnect()
+    loadHistory()
+  }, [conversationId, token, loadedConversations])
 
-    return () => {
-      isCancelled = true
-      wsRef.current?.close()
-    }
-  }, [conversationId, token])
-
-  const sendMessage = useCallback((message: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      setMessages((prev) => [
-        ...prev,
-        { id: Date.now().toString(), role: "user", content: message, type: "message" },
-      ])
-      wsRef.current.send(JSON.stringify({ type: "message", message }))
-    }
-  }, [])
+  const sendMessage = useCallback(
+    (message: string) => {
+      if (!conversationId) return
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        appendMessage(conversationId, {
+          id: Date.now().toString(),
+          role: "user",
+          content: message,
+          type: "message",
+        })
+        wsRef.current.send(JSON.stringify({ type: "message", message, conversation_id: conversationId }))
+      }
+    },
+    [conversationId, appendMessage],
+  )
 
   const sendContext = useCallback(
     (filename: string, content: string, file_type: "document" | "image", preview?: string, userMessage?: string) => {
+      if (!conversationId) return
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now().toString(),
-            role: "user" as const,
-            content: "",
-            type: "attachment" as const,
-            attachmentData: { filename, file_type, preview, userMessage },
-          },
-        ])
-        wsRef.current.send(JSON.stringify({ type: "context", filename, content, file_type }))
+        appendMessage(conversationId, {
+          id: Date.now().toString(),
+          role: "user",
+          content: "",
+          type: "attachment",
+          attachmentData: { filename, file_type, preview, userMessage },
+        })
+        wsRef.current.send(
+          JSON.stringify({ type: "context", filename, content, file_type, conversation_id: conversationId }),
+        )
+      }
+    },
+    [conversationId, appendMessage],
+  )
+
+  const sendConfirmation = useCallback(
+    (confirm_id: string, approved: boolean) => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "confirm_response", confirm_id, approved }))
       }
     },
     [],
   )
 
-  const sendConfirmation = useCallback((confirm_id: string, approved: boolean) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "confirm_response", confirm_id, approved }))
-    }
-  }, [])
+  const messages = conversationId ? messagesByConversation[conversationId] || [] : []
+  const isThinking = conversationId ? thinkingSet.has(conversationId) : false
 
   return (
     <ChatContext.Provider
