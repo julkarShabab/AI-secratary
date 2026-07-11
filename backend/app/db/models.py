@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, Boolean
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
@@ -28,6 +28,7 @@ class Conversation(Base):
     id = Column(String, primary_key=True, default=_uuid)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, default=1)
     title = Column(String, default="New conversation")
+    is_starred = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

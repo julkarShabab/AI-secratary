@@ -15,11 +15,17 @@ class MessageOut(BaseModel):
 class ConversationOut(BaseModel):
     id: str
     title: str
+    is_starred: bool
     created_at: datetime
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ConversationUpdate(BaseModel):
+    title: str | None = None
+    is_starred: bool | None = None
 
 
 class ConversationDetailOut(ConversationOut):

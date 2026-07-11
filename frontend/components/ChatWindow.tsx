@@ -3,7 +3,6 @@ import ReactMarkdown from "react-markdown";
 import { useState, useRef, useEffect } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ConfirmAction from "@/components/ConfirmAction";
 import AttachmentCard from "@/components/AttachmentCard";
@@ -193,17 +192,22 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto p-4">
+    <div className="flex flex-col h-full max-w-3xl mx-auto p-4 min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4 pb-4 border-b">
+      <div className="flex items-center justify-between mb-4 p-4 rounded-xl glass-panel">
         <div>
-          <h1 className="text-xl font-semibold">Aria</h1>
-          <p className="text-sm text-muted-foreground">AI Personal Secretary</p>
+          <h1 className="text-xl font-heading font-semibold tracking-tight">Aria</h1>
+          <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">AI Secretary</p>
         </div>
-        <div className="flex items-center gap-3">
-          <Badge variant={isConnected ? "default" : "destructive"}>
-            {isConnected ? "Connected" : "Disconnected"}
-          </Badge>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? "bg-signal signal-dot" : "bg-destructive"
+              }`}
+            />
+            {isConnected ? "online" : "offline"}
+          </div>
           <Link href="/settings">
             <Button variant="outline" size="sm">
               Settings
@@ -213,7 +217,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 pr-4">
+      <ScrollArea className="flex-1 min-h-0 pr-4">
         <div className="flex flex-col gap-4 pb-4">
           {messages.map((msg) => (
             <div
@@ -228,7 +232,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
                     preview={msg.attachmentData.preview}
                   />
                   {msg.attachmentData.userMessage && (
-                    <div className="max-w-[75%] rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap bg-primary text-primary-foreground">
+                    <div className="max-w-[75%] rounded-xl rounded-br-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap bubble-user text-primary-foreground">
                       {msg.attachmentData.userMessage}
                     </div>
                   )}
@@ -245,15 +249,15 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
                   }
                 />
               ) : msg.role === "system" ? (
-                <div className="text-xs text-muted-foreground text-center w-full py-1">
+                <div className="text-xs text-muted-foreground text-center w-full py-1 font-mono">
                   {msg.content}
                 </div>
               ) : (
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  className={`max-w-[75%] rounded-xl px-4 py-3 text-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : "bg-muted text-foreground rounded-bl-sm"
+                      ? "bubble-user text-primary-foreground rounded-br-sm"
+                      : "glass-panel text-foreground rounded-bl-sm"
                   }`}
                 >
                   {msg.role === "user" ? (
@@ -279,12 +283,12 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
                         ),
                         li: ({ children }) => <li>{children}</li>,
                         code: ({ children }) => (
-                          <code className="bg-black/10 dark:bg-white/10 rounded px-1 py-0.5 text-xs font-mono">
+                          <code className="bg-black/20 rounded px-1 py-0.5 text-xs font-mono">
                             {children}
                           </code>
                         ),
                         pre: ({ children }) => (
-                          <pre className="bg-black/10 dark:bg-white/10 rounded p-3 text-xs font-mono overflow-x-auto mb-2">
+                          <pre className="bg-black/20 rounded p-3 text-xs font-mono overflow-x-auto mb-2">
                             {children}
                           </pre>
                         ),
@@ -315,11 +319,11 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
 
           {isThinking && (
             <div className="flex justify-start">
-              <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3">
-                <div className="flex gap-1 items-center h-4">
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:0ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:150ms]" />
-                  <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:300ms]" />
+              <div className="glass-panel rounded-xl rounded-bl-sm px-4 py-3">
+                <div className="flex gap-1.5 items-center h-4">
+                  <span className="w-1.5 h-1.5 bg-signal rounded-full signal-dot [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 bg-signal rounded-full signal-dot [animation-delay:200ms]" />
+                  <span className="w-1.5 h-1.5 bg-signal rounded-full signal-dot [animation-delay:400ms]" />
                 </div>
               </div>
             </div>
@@ -347,7 +351,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
 
       {/* Pending file preview */}
       {pendingFile && (
-        <div className="flex items-center gap-3 mb-2 p-3 bg-muted rounded-xl border">
+        <div className="flex items-center gap-3 mb-2 p-3 glass-panel rounded-xl">
           {pendingFile.type === "image" && pendingFile.preview ? (
             <img
               src={pendingFile.preview}
@@ -370,7 +374,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
       )}
 
       {/* Input bar */}
-      <div className="flex gap-2 mt-2 pt-4 border-t items-end">
+      <div className="flex gap-2 mt-2 p-3 rounded-xl glass-panel items-end">
         {/* + attach menu */}
         <div className="relative shrink-0" ref={menuRef}>
           <Button
@@ -384,22 +388,22 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
           </Button>
 
           {showAttachMenu && (
-            <div className="absolute bottom-10 left-0 bg-background border rounded-xl shadow-lg py-1 w-52 z-50">
+            <div className="absolute bottom-10 left-0 glass-panel-strong rounded-xl shadow-lg py-1 w-52 z-50">
               <button
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 text-left"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <span>📄</span> Add files
               </button>
               <button
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 text-left"
                 onClick={() => imageInputRef.current?.click()}
               >
                 <span>🖼️</span> Add photos
               </button>
-              <div className="border-t my-1" />
+              <div className="border-t border-white/10 my-1" />
               <button
-                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left"
+                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-white/5 text-left"
                 onClick={() => {
                   handleVoiceInput();
                   setShowAttachMenu(false);
@@ -424,7 +428,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
           placeholder={isConnected ? "Message Aria..." : "Connecting..."}
           disabled={!isConnected}
           rows={1}
-          className="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto"
+          className="flex-1 resize-none rounded-md border border-input bg-background/50 px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 overflow-y-auto"
           style={{ maxHeight: "128px" }}
         />
 
@@ -434,7 +438,7 @@ export default function ChatWindow({ conversationId, token }: ChatWindowProps) {
           disabled={
             !isConnected || (!input.trim() && !pendingFile) || isUploading
           }
-          className="shrink-0"
+          className="shrink-0 glow-signal"
         >
           {isUploading ? "Sending..." : "Send"}
         </Button>

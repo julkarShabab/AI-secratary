@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import ChatWindow from "@/components/ChatWindow"
 import Sidebar from "@/components/Sidebar"
@@ -10,6 +10,7 @@ export default function Home() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const { user, token, isLoading, logout } = useAuth()
   const router = useRouter()
+  const hasInitialized = useRef(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -18,7 +19,8 @@ export default function Home() {
   }, [isLoading, user, router])
 
   useEffect(() => {
-    if (!token || conversationId) return
+    if (!token || hasInitialized.current) return
+    hasInitialized.current = true
 
     const createOrLoadConversation = async () => {
       try {
@@ -43,11 +45,12 @@ export default function Home() {
         }
       } catch (err) {
         console.error("Failed to load conversation:", err)
+        hasInitialized.current = false
       }
     }
 
     createOrLoadConversation()
-  }, [token, conversationId])
+  }, [token])
 
   if (isLoading || !user || !conversationId) {
     return (
@@ -58,7 +61,7 @@ export default function Home() {
   }
 
   return (
-    <main className="h-screen flex">
+    <main className="h-screen flex overflow-hidden">
       <Sidebar
         activeId={conversationId}
         onSelect={setConversationId}
@@ -67,7 +70,7 @@ export default function Home() {
         userName={user.name || user.email}
         onLogout={logout}
       />
-      <div className="flex-1">
+      <div className="flex-1 min-h-0 h-full">
         <ChatWindow conversationId={conversationId} token={token!} />
       </div>
     </main>

@@ -40,7 +40,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-muted/30 p-4">
-      <Card className="w-full max-w-sm p-6">
+      <Card className="w-full max-w-sm p-6 glass-panel-strong border-0 glow-signal">
         <div className="text-center mb-6">
           <h1 className="text-xl font-semibold">Aria</h1>
           <p className="text-sm text-muted-foreground">AI Personal Secretary</p>
