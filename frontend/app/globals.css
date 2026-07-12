@@ -49,7 +49,43 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root,
+:root {
+  --background: #f7f8fa;
+  --foreground: #1a1d23;
+  --card: #ffffff;
+  --card-foreground: #1a1d23;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d23;
+  --primary: #5468ff;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #1a1d23;
+  --muted: #eef0f4;
+  --muted-foreground: #6b7280;
+  --accent: #eef0f4;
+  --accent-foreground: #1a1d23;
+  --destructive: #d33d3d;
+  --border: #e2e5ea;
+  --input: #e2e5ea;
+  --ring: #5468ff;
+  --signal: #5468ff;
+  --amber: #b8860b;
+  --chart-1: #5468ff;
+  --chart-2: #7d8fff;
+  --chart-3: #a6b2ff;
+  --chart-4: #cfd5ff;
+  --chart-5: #eceffe;
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1d23;
+  --sidebar-primary: #5468ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0f4;
+  --sidebar-accent-foreground: #1a1d23;
+  --sidebar-border: #e2e5ea;
+  --sidebar-ring: #5468ff;
+}
+
 .dark {
   --background: #0e1116;
   --foreground: #e6e8eb;
@@ -128,6 +164,10 @@ body::before {
   height: 600px;
   top: -200px;
   right: -150px;
+  background: color-mix(in oklab, var(--signal) 18%, transparent);
+}
+
+.dark body::before {
   background: color-mix(in oklab, var(--signal) 35%, transparent);
 }
 
@@ -136,9 +176,12 @@ body::after {
   height: 500px;
   bottom: -250px;
   left: -150px;
-  background: color-mix(in oklab, #9c6cff 28%, transparent);
+  background: color-mix(in oklab, #9c6cff 14%, transparent);
 }
 
+.dark body::after {
+  background: color-mix(in oklab, #9c6cff 28%, transparent);
+}
 .glass-panel {
   background: color-mix(in oklab, var(--card) 55%, transparent);
   backdrop-filter: blur(20px);

@@ -3,6 +3,7 @@ import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { ThemeProvider } from "@/components/theme-provider";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -32,12 +33,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-screen antialiased dark overflow-hidden`}
+      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-screen antialiased overflow-hidden`}
+      suppressHydrationWarning
     >
       <body className="h-screen flex flex-col overflow-hidden">
-        <AuthProvider>
-          <ChatProvider>{children}</ChatProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ChatProvider>{children}</ChatProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

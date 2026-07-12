@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { ThemeToggle } from "@/components/ThemeToggle"
 import { Button } from "@/components/ui/button";
 
 type Conversation = {
@@ -232,8 +233,9 @@ export default function Sidebar({
 
   return (
     <div className="w-64 h-full flex flex-col glass-panel-strong border-r-0">
-      <div className="px-4 py-4 border-b border-white/10">
+      <div className="px-4 py-4 border-b border-white/10 flex items-center justify-between">
         <h2 className="font-heading font-semibold tracking-tight">Aria</h2>
+        <ThemeToggle />
       </div>
 
       <div className="p-3 border-b border-white/10">
