@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || API_URL.replace(/^http/, "ws");
+
 export type MessageType = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -37,7 +40,7 @@ export function useWebSocket(sessionId: string, token: string) {
 
     const loadHistoryAndConnect = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/conversations/${sessionId}`, {
+        const res = await fetch(`${API_URL}/api/conversations/${sessionId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.ok) {
@@ -59,7 +62,7 @@ export function useWebSocket(sessionId: string, token: string) {
 
       if (isCancelled) return;
 
-      const ws = new WebSocket(`ws://localhost:8000/ws/chat/${sessionId}?token=${token}`);
+      const ws = new WebSocket(`${WS_URL}/ws/chat/${sessionId}?token=${token}`);
       wsRef.current = ws;
 
       ws.onopen = () => setIsConnected(true);

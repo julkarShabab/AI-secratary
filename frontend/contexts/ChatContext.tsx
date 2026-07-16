@@ -3,7 +3,8 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 
-const API_URL = "http://localhost:8000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || API_URL.replace(/^http/, "ws")
 const STORAGE_KEY = "aria_active_conversation"
 
 export type MessageType = {
@@ -114,7 +115,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!token) return
 
-    const ws = new WebSocket(`ws://localhost:8000/ws/chat?token=${token}`)
+    const ws = new WebSocket(`${WS_URL}/ws/chat?token=${token}`)
     wsRef.current = ws
 
     ws.onopen = () => setIsConnected(true)
