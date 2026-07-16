@@ -8,6 +8,7 @@ from app.api.upload import router as upload_router
 from app.api.conversations import router as conversations_router
 from app.api.auth import router as auth_router
 from app.db.session import init_db
+from app.tasks.scheduler import start_scheduler, stop_scheduler
 import os
 
 app = FastAPI(
@@ -33,6 +34,12 @@ app.include_router(auth_router)
 @app.on_event("startup")
 def on_startup():
     init_db()
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_scheduler()
 
 
 @app.get("/health")

@@ -1,8 +1,6 @@
-from app.tasks.celery_app import celery_app
 from app.integrations.gmail import GmailIntegration
 
 
-@celery_app.task(name="app.tasks.email_watcher.watch_emails")
 def watch_emails():
     """
     Polls Gmail inbox every 10 minutes.

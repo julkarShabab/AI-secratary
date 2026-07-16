@@ -15,7 +15,7 @@ google-api-python-client
 ddgs
 slack-sdk
 jira
-celery
+apscheduler
 websockets
 pytest
 pytest-asyncio

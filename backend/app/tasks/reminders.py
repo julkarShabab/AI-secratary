@@ -1,9 +1,7 @@
 from datetime import datetime, timezone, timedelta
-from app.tasks.celery_app import celery_app
 from app.integrations.google_calendar import GoogleCalendarIntegration
 
 
-@celery_app.task(name="app.tasks.reminders.send_reminders")
 def send_reminders():
     """
     Checks calendar for events in the next 30 minutes

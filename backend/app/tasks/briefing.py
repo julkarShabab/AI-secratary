@@ -1,10 +1,8 @@
-from app.tasks.celery_app import celery_app
 from app.integrations.gmail import GmailIntegration
 from app.integrations.google_calendar import GoogleCalendarIntegration
 from app.llm.groq_llm import GroqLLM
 
 
-@celery_app.task(name="app.tasks.briefing.generate_daily_briefing")
 def generate_daily_briefing():
     """
     Runs every morning at 8am.
