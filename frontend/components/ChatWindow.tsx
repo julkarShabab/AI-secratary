@@ -9,6 +9,8 @@ import ConfirmAction from "@/components/ConfirmAction";
 import AttachmentCard from "@/components/AttachmentCard";
 import Link from "next/link";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 type PendingFile = {
   file: File;
   type: "document" | "image";
@@ -104,7 +106,7 @@ export default function ChatWindow() {
             ? "/upload/document"
             : "/upload/image";
 
-        const res = await fetch(`http://localhost:8000${endpoint}`, {
+        const res = await fetch(`${API_URL}${endpoint}`, {
           method: "POST",
           body: formData,
         });
