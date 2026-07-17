@@ -1,50 +1,13 @@
-import os
 from typing import List, Dict, Any
 from datetime import datetime, timezone
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-
-
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.send",
-    "https://www.googleapis.com/auth/calendar"
-]
-
-TOKEN_FILE = "gmail_token.json"
-CREDENTIALS_FILE = "credentials.json"
 
 
 class GoogleCalendarIntegration:
 
-    def __init__(self):
-        self.service = self._authenticate()
-
-    def _authenticate(self):
-        """
-        Reuses the same token file as Gmail.
-        If token doesn't have calendar scope, re-authenticates.
-        """
-        creds = None
-
-        if os.path.exists(TOKEN_FILE):
-            creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CREDENTIALS_FILE, SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-
-            with open(TOKEN_FILE, "w") as token:
-                token.write(creds.to_json())
-
-        return build("calendar", "v3", credentials=creds)
+    def __init__(self, credentials: Credentials):
+        self.service = build("calendar", "v3", credentials=credentials)
 
     def list_events(self, max_results: int = 10) -> List[Dict]:
         """

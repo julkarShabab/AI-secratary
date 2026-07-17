@@ -1,12 +1,19 @@
 from typing import Dict, Any
+from sqlalchemy.orm import Session
 from app.tools.base_tool import BaseTool
 from app.integrations.gmail import GmailIntegration
+from app.integrations.google_auth import get_credentials_for_user
+from app.db import models
 
 
 class EmailTool(BaseTool):
 
-    def __init__(self):
-        self.gmail = GmailIntegration()
+    def __init__(self, user_id: int, db: Session):
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if not user:
+            raise ValueError("User not found")
+        credentials = get_credentials_for_user(user, db)
+        self.gmail = GmailIntegration(credentials)
 
     @property
     def name(self) -> str:

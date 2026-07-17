@@ -22,14 +22,21 @@ with open("app/prompts/system_prompt.txt", "r") as f:
     system_prompt = f.read()
 
 
-def get_tools():
-    return [
-        EmailTool(),
-        CalendarTool(),
-        SearchTool(),
-        SlackTool(),
-        TaskTool()
+def get_tools(user_id: int, db):
+    tool_factories = [
+        lambda: EmailTool(user_id=user_id, db=db),
+        lambda: CalendarTool(user_id=user_id, db=db),
+        lambda: SearchTool(),
+        lambda: SlackTool(),
+        lambda: TaskTool(),
     ]
+    tools = []
+    for make_tool in tool_factories:
+        try:
+            tools.append(make_tool())
+        except Exception as e:
+            print(f"[get_tools] Skipping a tool, failed to init: {e}")
+    return tools
 
 
 def _get_or_create_conversation(db, conversation_id: str, user_id: int):
@@ -87,7 +94,7 @@ class ConversationSession:
         self.memory = MemoryManager(session_id=conversation_id)
         self.orchestrator = Orchestrator(
             llm=GroqLLM(),
-            tools=get_tools(),
+            tools=get_tools(user_id=user_id, db=db),
             system_prompt=system_prompt
         )
 

@@ -17,6 +17,10 @@ class User(Base):
     name = Column(String, nullable=True)
     google_id = Column(String, unique=True, nullable=True)
     hashed_password = Column(String, nullable=True)  # null for Google-only accounts
+    google_access_token = Column(String, nullable=True)
+    google_refresh_token = Column(String, nullable=True)
+    google_token_expiry = Column(DateTime, nullable=True)
+    google_scopes = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")

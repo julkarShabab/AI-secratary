@@ -6,6 +6,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timezone, timedelta
 from app.db.session import get_db, SessionLocal
 from app.db import models
 from app.core.security import hash_password, verify_password, create_access_token
@@ -63,15 +64,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token, "user": _user_to_dict(user)}
 
 
+GOOGLE_OAUTH_SCOPES = (
+    "openid email profile "
+    "https://www.googleapis.com/auth/gmail.readonly "
+    "https://www.googleapis.com/auth/gmail.send "
+    "https://www.googleapis.com/auth/calendar"
+)
+
+
 @router.get("/google/login")
 def google_login():
     params = {
         "client_id": GOOGLE_CLIENT_ID,
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "response_type": "code",
-        "scope": "openid email profile",
+        "scope": GOOGLE_OAUTH_SCOPES,
         "access_type": "offline",
-        
+        "prompt": "consent",
     }
     url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
     return RedirectResponse(url)
@@ -109,8 +118,19 @@ def google_callback(code: str):
             else:
                 user = models.User(email=email, name=name, google_id=google_id)
                 db.add(user)
-            db.commit()
-            db.refresh(user)
+
+        # Google only sends a refresh_token on the first consent (or when
+        # prompt=consent is forced, which we do). Never overwrite a stored
+        # refresh_token with a missing one on subsequent logins.
+        user.google_access_token = token_data["access_token"]
+        if token_data.get("refresh_token"):
+            user.google_refresh_token = token_data["refresh_token"]
+        expires_in = token_data.get("expires_in", 3600)
+        user.google_token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        user.google_scopes = token_data.get("scope", GOOGLE_OAUTH_SCOPES)
+
+        db.commit()
+        db.refresh(user)
 
         jwt_token = create_access_token(user.id)
     finally:
