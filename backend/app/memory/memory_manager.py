@@ -1,6 +1,8 @@
-from typing import List, Dict, Any
+import os
+from typing import List, Dict, Any, Optional
 from app.memory.short_term import ShortTermMemory
-from app.memory.long_term import LongTermMemory
+
+ENABLE_LONG_TERM_MEMORY = os.getenv("ENABLE_LONG_TERM_MEMORY", "true").lower() == "true"
 
 
 SAVE_TO_LONG_TERM_KEYWORDS = [
@@ -31,7 +33,10 @@ class MemoryManager:
         session_id ties the short term memory to a specific user session.
         """
         self.short_term = ShortTermMemory(session_id=session_id)
-        self.long_term = LongTermMemory()
+        self.long_term: Optional[Any] = None
+        if ENABLE_LONG_TERM_MEMORY:
+            from app.memory.long_term import LongTermMemory  # heavy import (torch); only pay for it if enabled
+            self.long_term = LongTermMemory()
 
     def save_message(self, role: str, content: str):
         """
@@ -41,7 +46,7 @@ class MemoryManager:
         """
         self.short_term.add_message(role=role, content=content)
 
-        if role == "user" and self._should_save_long_term(content):
+        if role == "user" and self.long_term and self._should_save_long_term(content):
             self.long_term.save(
                 text=content,
                 metadata={"type": "user_statement", "source": "conversation"}
@@ -60,6 +65,9 @@ class MemoryManager:
         Searches long term memory for relevant context.
         Returns a formatted string ready to inject into the system prompt.
         """
+        if not self.long_term:
+            return ""
+
         results = self.long_term.recall(query=query, top_k=top_k)
 
         if not results:
@@ -80,7 +88,8 @@ class MemoryManager:
         Manually save something important to long term memory.
         Call this when the orchestrator detects key user information.
         """
-        self.long_term.save(text=text, metadata=metadata)
+        if self.long_term:
+            self.long_term.save(text=text, metadata=metadata)
 
     def clear_session(self):
         """
